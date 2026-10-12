@@ -9,8 +9,21 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    volumes:
+      # Carpeta del host donde el agente de CloudWatch hará tail
+      - /var/log/calculadora:/var/log/calculadora
+    # Vuelca el stdout (uvicorn) al archivo que lee el agente.
+    # IMPORTANTE: usar formato exec ["sh","-c","..."].
+    # umask 000 -> el archivo nace 666; backend y frontend escriben el mismo.
+    command: ["sh", "-c", "umask 000; uvicorn main:app --host 0.0.0.0 --port 8000 2>&1 | tee -a /var/log/calculadora/calculadora.log"]
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys,urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:8000/api/health').getcode()==200 else 1)"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:8000/health').getcode() == 200 else 1)"
+        ]
       interval: 5s
       timeout: 5s
       retries: 3
@@ -23,8 +36,8 @@ services:
     depends_on:
       - backend
     environment:
-      - BACKEND_HOST=backend
-      - BACKEND_PORT=8000
+      BACKEND_HOST: backend
+      BACKEND_PORT: "8000"
     networks:
       - app
     restart: unless-stopped
@@ -36,6 +49,12 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    volumes:
+      - /var/log/calculadora:/var/log/calculadora
+    # Vuelca el stdout (nginx) al archivo que lee el agente.
+    # Invocar /docker-entrypoint.sh nginx para que genere la configuración
+    # y nginx permanezca en primer plano.
+    command: ["sh", "-c", "umask 000; /docker-entrypoint.sh nginx -g 'daemon off;' 2>&1 | tee -a /var/log/calculadora/calculadora.log"]
 
 networks:
   app:

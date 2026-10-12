@@ -20,3 +20,4 @@ venv/
 htmlcov/
 dist/
 build/
+**/ulises/
